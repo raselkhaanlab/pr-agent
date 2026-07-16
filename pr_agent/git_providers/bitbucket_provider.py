@@ -2,7 +2,7 @@ import difflib
 import json
 import re
 from typing import Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 import requests
 from atlassian.bitbucket import Cloud
@@ -77,10 +77,29 @@ class BitbucketProvider(GitProvider):
         self.bitbucket_comment_api_url = self.pr._BitbucketBase__data["links"]["comments"]["href"]
         self.bitbucket_pull_request_api_url = self.pr._BitbucketBase__data["links"]['self']['href']
 
+    def get_commit_for_branch(self):
+        """Resolve branch name (e.g. phase-2/develop) to commit hash. Required when branch contains '/'."""
+        ref_encoded = quote(self.pr.destination_branch, safe="")
+        url = f"https://api.bitbucket.org/2.0/repositories/{self.workspace_slug}/{self.repo_slug}/refs/branches/{ref_encoded}"
+        resp = requests.get(url, headers=self.headers)
+        resp.raise_for_status()
+        return resp.json()["target"]["hash"]
+
+    def _get_src_ref(self):
+        """
+        Get the ref to use in the /src/ URL. For branches without '/', use the name as-is.
+        For branches with '/' (e.g. phase-2/develop), Bitbucket treats the first path segment
+        as the ref, so we must resolve to a commit hash via refs/branches.
+        """
+        if "/" in self.pr.destination_branch:
+            return self.get_commit_for_branch()
+        return self.pr.destination_branch
+
     def get_repo_settings(self):
         try:
+            ref = self._get_src_ref()
             url = (f"https://api.bitbucket.org/2.0/repositories/{self.workspace_slug}/{self.repo_slug}/src/"
-                   f"{self.pr.destination_branch}/.pr_agent.toml")
+                   f"{ref}/.pr_agent.toml")
             response = requests.request("GET", url, headers=self.headers)
             if response.status_code == 404:  # not found
                 return ""
