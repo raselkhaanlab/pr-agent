@@ -5,7 +5,7 @@ import requests
 from litellm import acompletion
 from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt
 
-from pr_agent.algo import CLAUDE_EXTENDED_THINKING_MODELS, model_supports_temperature, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS, STREAMING_REQUIRED_MODELS
+from pr_agent.algo import model_supports_claude_extended_thinking, model_supports_reasoning_effort, model_supports_temperature, USER_MESSAGE_ONLY_MODELS, STREAMING_REQUIRED_MODELS
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.ai_handlers.litellm_helpers import _handle_streaming_response, MockResponse, _get_azure_ad_token, \
     _process_litellm_extra_body
@@ -138,12 +138,6 @@ class LiteLLMAIHandler(BaseAiHandler):
         # Models that only use user message
         self.user_message_only_models = USER_MESSAGE_ONLY_MODELS
 
-
-        # Models that support reasoning effort
-        self.support_reasoning_models = SUPPORT_REASONING_EFFORT_MODELS
-
-        # Models that support extended thinking
-        self.claude_extended_thinking_models = CLAUDE_EXTENDED_THINKING_MODELS
 
         # Models that require streaming
         self.streaming_required_models = STREAMING_REQUIRED_MODELS
@@ -289,7 +283,7 @@ class LiteLLMAIHandler(BaseAiHandler):
                                           {"type": "image_url", "image_url": {"url": img_path}}]
 
             thinking_kwargs_gpt5 = None
-            if model.startswith('gpt-5'):
+            if model.rsplit('/', 1)[-1].startswith('gpt-5'):
                 # Use configured reasoning_effort or default to MEDIUM
                 config_effort = get_settings().config.reasoning_effort
                 try:
@@ -308,7 +302,9 @@ class LiteLLMAIHandler(BaseAiHandler):
                     "allowed_openai_params": ["reasoning_effort"],
                 }
                 get_logger().info(f"Using reasoning_effort='{effort}' for GPT-5 model")
-                model = 'openai/'+model.replace('_thinking', '')  # remove _thinking suffix
+                model = model.replace('_thinking', '')  # remove _thinking suffix
+                if '/' not in model:  # bare model name, no provider prefix (azure/, openai/, ...) - default to openai
+                    model = 'openai/' + model
 
 
             # Currently, some models do not support a separate system and user prompts
@@ -344,7 +340,7 @@ class LiteLLMAIHandler(BaseAiHandler):
                     del kwargs['temperature']
 
             # Add reasoning_effort if model supports it
-            if model in self.support_reasoning_models:
+            if model_supports_reasoning_effort(model):
                 config_effort = get_settings().config.reasoning_effort
                 try:
                     ReasoningEffort(config_effort)
@@ -361,7 +357,7 @@ class LiteLLMAIHandler(BaseAiHandler):
                 kwargs["reasoning_effort"] = reasoning_effort
 
             # https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
-            if (model in self.claude_extended_thinking_models) and get_settings().config.get("enable_claude_extended_thinking", False):
+            if model_supports_claude_extended_thinking(model) and get_settings().config.get("enable_claude_extended_thinking", False):
                 kwargs = self._configure_claude_extended_thinking(model, kwargs)
 
             if get_settings().litellm.get("enable_callbacks", False):
@@ -402,8 +398,24 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
 
+            get_logger().info(
+                f"LLM call for model={kwargs.get('model')}: "
+                f"reasoning_effort={kwargs.get('reasoning_effort', 'NOT SENT')}, "
+                f"temperature={kwargs.get('temperature', 'NOT SENT')}"
+            )
+
             # Get completion with automatic streaming detection
             resp, finish_reason, response_obj = await self._get_completion(**kwargs)
+
+            usage = getattr(response_obj, "usage", None)
+            reasoning_tokens = None
+            if usage is not None:
+                details = getattr(usage, "completion_tokens_details", None)
+                reasoning_tokens = getattr(details, "reasoning_tokens", None) if details else None
+            get_logger().info(
+                f"LLM response for model={kwargs.get('model')}: "
+                f"reasoning_tokens={reasoning_tokens}, usage={usage}"
+            )
 
         except openai.RateLimitError as e:
             get_logger().error(f"Rate limit error during LLM inference: {e}")
