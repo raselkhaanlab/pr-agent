@@ -328,7 +328,9 @@ async def retry_with_fallback_models(f: Callable, model_type: ModelType = ModelT
                 f"{(' from deployment ' + deployment_id) if deployment_id else ''}"
             )
             get_settings().set("openai.deployment_id", deployment_id)
-            return await f(model)
+            result = await f(model)
+            get_logger().info(f"Used model '{model}' to generate the prediction")
+            return result
         except Exception as e:
             get_logger().warning(
                 f"Failed to generate prediction with {model}",

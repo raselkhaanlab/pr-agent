@@ -238,25 +238,22 @@ USER_MESSAGE_ONLY_MODELS = [
     "o1-preview"
 ]
 
-NO_SUPPORT_TEMPERATURE_MODELS = [
+NO_SUPPORT_TEMPERATURE_PREFIXES = ("o1", "o3", "o4", "gpt-5")
+NO_SUPPORT_TEMPERATURE_EXTRA_MODELS = [
     "deepseek/deepseek-reasoner",
-    "o1-mini",
-    "o1-mini-2024-09-12",
-    "o1",
-    "o1-2024-12-17",
-    "o3-mini",
-    "o3-mini-2025-01-31",
-    "o1-preview",
-    "o3",
-    "o3-2025-04-16",
-    "o4-mini",
-    "o4-mini-2025-04-16",
-    "gpt-5.1-codex",
-    "gpt-5.1-codex-mini",
-    "gpt-5.2-codex",
-    "gpt-5.3-codex",
-    "gpt-5-mini"
 ]
+
+
+def model_supports_temperature(model: str) -> bool:
+    """False for reasoning-family models that reject a custom temperature value.
+
+    Model strings are litellm-style ("openai/gpt-5.4-mini"), so match against
+    the part after the last "/", not the provider-prefixed full string.
+    """
+    if model in NO_SUPPORT_TEMPERATURE_EXTRA_MODELS:
+        return False
+    model_name = model.rsplit("/", 1)[-1]
+    return not model_name.startswith(NO_SUPPORT_TEMPERATURE_PREFIXES)
 
 SUPPORT_REASONING_EFFORT_MODELS = [
     "o3-mini",

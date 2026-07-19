@@ -5,7 +5,7 @@ import requests
 from litellm import acompletion
 from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt
 
-from pr_agent.algo import CLAUDE_EXTENDED_THINKING_MODELS, NO_SUPPORT_TEMPERATURE_MODELS, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS, STREAMING_REQUIRED_MODELS
+from pr_agent.algo import CLAUDE_EXTENDED_THINKING_MODELS, model_supports_temperature, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS, STREAMING_REQUIRED_MODELS
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.ai_handlers.litellm_helpers import _handle_streaming_response, MockResponse, _get_azure_ad_token, \
     _process_litellm_extra_body
@@ -138,8 +138,6 @@ class LiteLLMAIHandler(BaseAiHandler):
         # Models that only use user message
         self.user_message_only_models = USER_MESSAGE_ONLY_MODELS
 
-        # Model that doesn't support temperature argument
-        self.no_support_temperature_models = NO_SUPPORT_TEMPERATURE_MODELS
 
         # Models that support reasoning effort
         self.support_reasoning_models = SUPPORT_REASONING_EFFORT_MODELS
@@ -336,7 +334,7 @@ class LiteLLMAIHandler(BaseAiHandler):
                 }
 
             # Add temperature only if model supports it
-            if model not in self.no_support_temperature_models and not get_settings().config.custom_reasoning_model:
+            if model_supports_temperature(model) and not get_settings().config.custom_reasoning_model:
                 # get_logger().info(f"Adding temperature with value {temperature} to model {model}.")
                 kwargs["temperature"] = temperature
 
