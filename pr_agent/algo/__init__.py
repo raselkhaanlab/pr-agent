@@ -238,36 +238,58 @@ USER_MESSAGE_ONLY_MODELS = [
     "o1-preview"
 ]
 
-NO_SUPPORT_TEMPERATURE_PREFIXES = ("o1", "o3", "o4", "gpt-5")
-NO_SUPPORT_TEMPERATURE_EXTRA_MODELS = [
-    "deepseek/deepseek-reasoner",
-]
+# o1/o3/o4/gpt-5: OpenAI reasoning models, reject a custom temperature outright (API error).
+# deepseek-reasoner/deepseek-r1: temperature is silently ignored rather than erroring (per
+# DeepSeek's docs), but there's no reason to send a value that does nothing.
+NO_SUPPORT_TEMPERATURE_PREFIXES = ("o1", "o3", "o4", "gpt-5", "deepseek-reasoner", "deepseek-r1")
 
 
 def model_supports_temperature(model: str) -> bool:
-    """False for reasoning-family models that reject a custom temperature value.
+    """False for reasoning-family models that reject (or silently ignore) a custom temperature value.
 
-    Model strings are litellm-style ("openai/gpt-5.4-mini"), so match against
-    the part after the last "/", not the provider-prefixed full string.
+    Model strings are litellm-style and vary in casing/prefix depth across providers
+    ("openai/gpt-5.4-mini", "together_ai/deepseek-ai/DeepSeek-R1"), so match against the
+    part after the last "/", lowercased, not the provider-prefixed full string.
     """
-    if model in NO_SUPPORT_TEMPERATURE_EXTRA_MODELS:
-        return False
-    model_name = model.rsplit("/", 1)[-1]
+    model_name = model.rsplit("/", 1)[-1].lower()
     return not model_name.startswith(NO_SUPPORT_TEMPERATURE_PREFIXES)
 
-SUPPORT_REASONING_EFFORT_MODELS = [
-    "o3-mini",
-    "o3-mini-2025-01-31",
-    "o3",
-    "o3-2025-04-16",
-    "o4-mini",
-    "o4-mini-2025-04-16",
-]
 
-CLAUDE_EXTENDED_THINKING_MODELS = [
-    "anthropic/claude-3-7-sonnet-20250219",
-    "claude-3-7-sonnet-20250219"
-]
+# o3/o4: confirmed via OpenAI's reasoning_effort docs. gpt-5 family is handled separately
+# in litellm_ai_handler.py (needs allowed_openai_params, not just this kwarg).
+SUPPORT_REASONING_EFFORT_PREFIXES = ("o3", "o4")
+
+
+def model_supports_reasoning_effort(model: str) -> bool:
+    """True for OpenAI o3/o4 reasoning models, which accept a reasoning_effort param.
+
+    Prefix-matched after stripping the provider prefix, same reasoning as
+    model_supports_temperature() - covers future o3/o4 dated snapshots automatically.
+    """
+    return model.rsplit("/", 1)[-1].lower().startswith(SUPPORT_REASONING_EFFORT_PREFIXES)
+
+
+# Verified against Anthropic's docs (2026-07): extended thinking is supported from
+# Claude 3.7 Sonnet onward - Sonnet 4/4.5/4.6, Opus 4/4.1/4.5/4.6/4.7/4.8, Haiku 4.5,
+# Sonnet 5. Prefix-based (not an exact dated-snapshot list) so new dated snapshots of
+# these lines work automatically; a genuinely new tier/generation still needs a prefix
+# added here. The Fable line is deliberately excluded - no confirmed support found.
+CLAUDE_EXTENDED_THINKING_PREFIXES = (
+    "claude-3-7-sonnet",
+    "claude-sonnet-4",
+    "claude-opus-4",
+    "claude-haiku-4-5",
+    "claude-sonnet-5",
+)
+
+
+def model_supports_claude_extended_thinking(model: str) -> bool:
+    """True for Claude models that support extended thinking (hybrid reasoning mode).
+
+    Matched after stripping the provider prefix and lowercasing, so both
+    "claude-..." and "anthropic/Claude-..." style configs work.
+    """
+    return model.rsplit("/", 1)[-1].lower().startswith(CLAUDE_EXTENDED_THINKING_PREFIXES)
 
 # Models that require streaming mode
 STREAMING_REQUIRED_MODELS = [
