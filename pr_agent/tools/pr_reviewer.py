@@ -23,6 +23,7 @@ from pr_agent.git_providers.git_provider import (IncrementalPR,
                                                  get_main_pr_language)
 from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
+from pr_agent.tools.pr_webhook_notifier import push_review_to_webhook
 from pr_agent.tools.ticket_pr_compliance_check import (
     extract_and_cache_pr_tickets, extract_tickets)
 
@@ -237,6 +238,9 @@ class PRReviewer:
                          keys_fix_yaml=["ticket_compliance_check", "estimated_effort_to_review_[1-5]:", "security_concerns:", "key_issues_to_review:",
                                         "relevant_file:", "relevant_line:", "suggestion:"],
                          first_key=first_key, last_key=last_key)
+        # Best-effort push to an external webhook; never blocks or fails the review itself.
+        push_review_to_webhook(self.git_provider, data)
+
         github_action_output(data, 'review')
 
         if 'review' not in data:
