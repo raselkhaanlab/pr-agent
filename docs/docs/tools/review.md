@@ -129,6 +129,37 @@ extra_instructions = "..."
       </tr>
     </table>
 
+## Webhook push
+
+In addition to publishing the review as a PR comment, the `review` tool can push the review result to an external webhook - useful for feeding review data into another system (e.g. a dashboard or KPI tracker).
+
+This is configured via environment variables only (not `configuration.toml` or CLI args, since those can be overridden from a PR comment, which would let an untrusted comment leak the signing secret):
+
+<table>
+  <tr>
+    <td><b>PR_AGENT_WEBHOOK__URL</b></td>
+    <td>The URL to push the review result to. Required - if unset, the webhook push is skipped.</td>
+  </tr>
+  <tr>
+    <td><b>PR_AGENT_WEBHOOK__SECRET</b></td>
+    <td>Optional. If set, the request body is signed with HMAC-SHA256 and sent as an <code>X-PR-Agent-Signature-256</code> header. If unset, the request is sent unsigned (no signature header).</td>
+  </tr>
+  <tr>
+    <td><b>PR_AGENT_WEBHOOK__MAX_RETRIES</b></td>
+    <td>Number of retries after the initial delivery attempt (total attempts = 1 + this value). Default is 1, i.e. 2 attempts total.</td>
+  </tr>
+  <tr>
+    <td><b>PR_AGENT_WEBHOOK__TIMEOUT_SECONDS</b></td>
+    <td>Per-attempt request timeout, in seconds. Default is 30.</td>
+  </tr>
+  <tr>
+    <td><b>PR_AGENT_WEBHOOK__BACKOFF_SECONDS</b></td>
+    <td>Base delay between retry attempts, in seconds (doubles each retry). Default is 1.</td>
+  </tr>
+</table>
+
+Delivery is synchronous and bounded - it retries on network errors, timeouts, and 5xx responses, but not on 4xx (treated as a permanent failure). Every request carries a stable `Idempotency-Key` header so the receiving end can detect and ignore duplicate deliveries caused by a retry. A webhook failure is logged but never breaks the review flow itself.
+
 ## Usage Tips
 
 ### General guidelines
