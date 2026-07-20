@@ -69,10 +69,77 @@ def build_review_webhook_payload(git_provider: GitProvider, review_data: dict) -
         "event_type": "review",
         "sender": "ait-pr-agent",
         "pull_request": _extract_pr_context(git_provider),
-        "agent_review": review_data.get("review", review_data),
+        "agent_review": _normalize_review_fields(review_data.get("review", review_data)),
     }
     get_logger().debug(f"Built review webhook payload: {payload}")
     return payload
+
+
+_NEGATIVE_ANSWERS = ("no", "none", "n/a", "")
+
+
+def _to_int(value):
+    """Best-effort int coercion for numeric fields the LLM sometimes returns as a string
+    (e.g. "4\n" from a YAML block scalar). Left as-is if it's not a clean number."""
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return value
+    return value
+
+
+def _to_bool(value):
+    """Best-effort bool coercion for yes/no fields. Matched against the negative case
+    rather than requiring an exact "yes", since the answer isn't always a bare word
+    (e.g. "No\n", "no", or a full sentence)."""
+    if isinstance(value, str):
+        return value.strip().lower() not in _NEGATIVE_ANSWERS
+    return bool(value)
+
+
+def _clean_str(value):
+    return value.strip() if isinstance(value, str) else value
+
+
+def _normalize_review_fields(review: dict) -> dict:
+    """Coerce known type-inconsistent LLM output fields to a stable shape for KPIHub.
+
+    The parsed YAML review can carry the same field as different types across runs -
+    numbers/booleans coming back as strings (often with a trailing newline from a YAML
+    block scalar), or a bare "No"/"Yes" implicitly typed as a bool by YAML itself.
+    Normalized here so the JSON payload has a stable schema regardless of what shape
+    this particular run produced.
+    """
+    normalized = dict(review)
+
+    for key in ("estimated_effort_to_review_[1-5]", "score"):
+        if key in normalized:
+            normalized[key] = _to_int(normalized[key])
+
+    if "relevant_tests" in normalized:
+        normalized["relevant_tests"] = _to_bool(normalized["relevant_tests"])
+
+    # security_concerns isn't a plain yes/no - the prompt asks for the literal string "No"
+    # when clean, or a full description otherwise. Split into a boolean flag (consistent
+    # type, easy to filter/alert on) plus the explanation in its own field, rather than
+    # collapsing to bool and silently discarding the description.
+    if "security_concerns" in normalized:
+        raw = normalized.pop("security_concerns")
+        has_concern = _to_bool(raw)
+        normalized["security_concerns"] = has_concern
+        normalized["security_concerns_details"] = raw.strip() if has_concern and isinstance(raw, str) else None
+
+    # Each issue's string fields (relevant_file, issue_header, issue_content) come from the
+    # same "|" block-scalar YAML style, so they carry the same trailing-newline noise.
+    issues = normalized.get("key_issues_to_review")
+    if isinstance(issues, list):
+        normalized["key_issues_to_review"] = [
+            {k: _clean_str(v) for k, v in issue.items()} if isinstance(issue, dict) else issue
+            for issue in issues
+        ]
+
+    return normalized
 
 
 async def send_review_webhook(payload: dict[str, Any]) -> bool:
