@@ -394,11 +394,14 @@ class PRReviewer:
                     if 1 <= estimated_effort_number <= 5:  # 1, because ...
                         review_labels.append(f'Review effort {estimated_effort_number}/5')
                 if get_settings().pr_reviewer.enable_review_labels_security and get_settings().pr_reviewer.require_security_review:
-                    security_concerns = data['review']['security_concerns']  # yes, because ...
+                    security_concerns = data['review']['security_concerns']
                     if isinstance(security_concerns, bool):
                         security_concerns_bool = security_concerns
                     else:
-                        security_concerns_bool = 'yes' in security_concerns.lower() or 'true' in security_concerns.lower()
+                        # The prompt asks for 'No' when clean, or a description of the concern
+                        # otherwise - so "has a concern" means "isn't the clean-bill-of-health answer",
+                        # not "contains the literal word yes/true" (which a real description rarely does).
+                        security_concerns_bool = security_concerns.strip().lower() not in ('no', 'none', 'n/a', '')
                     if security_concerns_bool:
                         review_labels.append('Possible security concern')
 
