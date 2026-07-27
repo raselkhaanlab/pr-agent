@@ -14,8 +14,9 @@ from pr_agent.algo.pr_processing import (add_ai_metadata_to_diff_files,
                                          retry_with_fallback_models)
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (ModelType, PRReviewHeader,
-                                 convert_to_markdown_v2, github_action_output,
-                                 load_yaml, show_relevant_configurations)
+                                 convert_to_markdown_v2, get_pr_agent_footer,
+                                 github_action_output, load_yaml,
+                                 show_relevant_configurations)
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import (get_git_provider,
                                     get_git_provider_with_context)
@@ -159,6 +160,7 @@ class PRReviewer:
                 return None
 
             pr_review = self._prepare_pr_review()
+            pr_review += get_pr_agent_footer()
             get_logger().debug(f"PR output", artifact=pr_review)
 
             should_publish = get_settings().config.publish_output and self._should_publish_review_no_suggestions(pr_review)
