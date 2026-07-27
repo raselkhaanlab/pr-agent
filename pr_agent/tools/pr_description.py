@@ -16,7 +16,8 @@ from pr_agent.algo.pr_processing import (OUTPUT_BUFFER_TOKENS_HARD_THRESHOLD,
                                          retry_with_fallback_models)
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (ModelType, PRDescriptionHeader, clip_tokens,
-                                 get_max_tokens, get_user_labels, load_yaml,
+                                 get_max_tokens, get_pr_agent_footer,
+                                 get_user_labels, load_yaml,
                                  set_custom_labels,
                                  show_relevant_configurations)
 from pr_agent.config_loader import get_settings
@@ -152,6 +153,8 @@ class PRDescription:
             # Output the relevant configurations if enabled
             if get_settings().get('config', {}).get('output_relevant_configurations', False):
                 pr_body += show_relevant_configurations(relevant_section='pr_description')
+
+            pr_body += get_pr_agent_footer()
 
             if get_settings().config.publish_output:
 

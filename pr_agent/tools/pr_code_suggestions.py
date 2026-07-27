@@ -19,7 +19,8 @@ from pr_agent.algo.pr_processing import (add_ai_metadata_to_diff_files,
                                          retry_with_fallback_models)
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (ModelType, load_yaml, replace_code_tags,
-                                 show_relevant_configurations, get_max_tokens, clip_tokens, get_model)
+                                 show_relevant_configurations, get_max_tokens, clip_tokens, get_model,
+                                 get_pr_agent_footer)
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import (AzureDevopsProvider, GithubProvider,
                                     GitLabProvider, get_git_provider,
@@ -152,6 +153,8 @@ class PRCodeSuggestions:
                     # Output the relevant configurations if enabled
                     if get_settings().get('config', {}).get('output_relevant_configurations', False):
                         pr_body += show_relevant_configurations(relevant_section='pr_code_suggestions')
+
+                    pr_body += get_pr_agent_footer()
 
                     # publish the PR comment
                     if get_settings().pr_code_suggestions.persistent_comment: # true by default
@@ -565,6 +568,7 @@ class PRCodeSuggestions:
                     body = f"**Suggestion:** {content} [{label}, importance: {d.get('score')}]\n```suggestion\n" + new_code_snippet + "\n```"
                 else:
                     body = f"**Suggestion:** {content} [{label}]\n```suggestion\n" + new_code_snippet + "\n```"
+                body += get_pr_agent_footer()
                 code_suggestions.append({'body': body, 'relevant_file': relevant_file,
                                          'relevant_lines_start': relevant_lines_start,
                                          'relevant_lines_end': relevant_lines_end,

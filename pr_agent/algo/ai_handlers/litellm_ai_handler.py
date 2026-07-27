@@ -1,4 +1,5 @@
 import os
+import time
 import litellm
 import openai
 import requests
@@ -405,7 +406,9 @@ class LiteLLMAIHandler(BaseAiHandler):
             )
 
             # Get completion with automatic streaming detection
+            _t0 = time.monotonic()
             resp, finish_reason, response_obj = await self._get_completion(**kwargs)
+            _elapsed = time.monotonic() - _t0
 
             usage = getattr(response_obj, "usage", None)
             reasoning_tokens = None
@@ -416,6 +419,17 @@ class LiteLLMAIHandler(BaseAiHandler):
                 f"LLM response for model={kwargs.get('model')}: "
                 f"reasoning_tokens={reasoning_tokens}, usage={usage}"
             )
+
+            # Capture the model that actually served this call (provider-agnostic):
+            # prefer the model reported in the response, fall back to the requested one.
+            # Read back at publish time via utils.get_pr_agent_footer().
+            used_model = getattr(response_obj, "model", None) or kwargs.get("model")
+            if used_model:
+                get_settings().set("config.pr_agent_used_model", used_model)
+            # Accumulate generation time across all calls in this command
+            # (reset per-command in PRAgent._handle_request); read by get_pr_agent_footer().
+            get_settings().set("config.pr_agent_gen_seconds",
+                               (get_settings().get("config.pr_agent_gen_seconds", 0) or 0) + _elapsed)
 
         except openai.RateLimitError as e:
             get_logger().error(f"Rate limit error during LLM inference: {e}")

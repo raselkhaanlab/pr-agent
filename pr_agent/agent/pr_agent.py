@@ -55,6 +55,11 @@ class PRAgent:
         # First, apply repo specific settings if exists
         apply_repo_settings(pr_url)
 
+        # Reset per-command model/timing accounting consumed by utils.get_pr_agent_footer()
+        # (one webhook request may run several commands; keep each command's stats separate)
+        for _k in ("pr_agent_used_model", "pr_agent_gen_seconds"):
+            get_settings().set(f"config.{_k}", None)
+
         # Then, apply user specific settings if exists
         if isinstance(request, str):
             request = request.replace("'", "\\'")
